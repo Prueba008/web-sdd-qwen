@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CartItem, CategoryFilter, Product, SortKey, ToastMsg, Weight } from "./types";
-import { CATEGORY_LABELS, FREE_SHIPPING_FROM, SHIPPING_COST, products } from "./data/products";
-import { priceForWeight } from "./lib/format";
+import { useEffect, useRef, useState } from "react";
+import type { Product, SortKey } from "./types";
+import { products, FREE_SHIPPING_FROM, SHIPPING_COST } from "./data/products";
 import Header from "./components/Header";
 import Masthead from "./components/Masthead";
 import ProductCard from "./components/ProductCard";
@@ -12,26 +11,9 @@ import Toasts from "./components/Toasts";
 import Footer from "./components/Footer";
 import Reveal from "./components/Reveal";
 import { BeanIcon, ChevronDownIcon, SearchIcon, XIcon } from "./components/Icons";
-
-const CART_KEY = "cafe-obscura-cart";
-
-const loadCart = (): CartItem[] => {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as CartItem[];
-    return Array.isArray(parsed) ? parsed.filter((i) => products.some((p) => p.id === i.productId)) : [];
-  } catch {
-    return [];
-  }
-};
-
-const FILTERS: { value: CategoryFilter; label: string }[] = [
-  { value: "all", label: "Todos" },
-  { value: "origen", label: CATEGORY_LABELS.origen },
-  { value: "blend", label: CATEGORY_LABELS.blend },
-  { value: "descafeinado", label: CATEGORY_LABELS.descafeinado },
-];
+import { useCart } from "./hooks/useCart";
+import { useProductFilters } from "./hooks/useProductFilters";
+import { useCartCalculations } from "./features/cart/hooks/useCartCalculations";
 
 const RITUAL = [
   {
@@ -52,33 +34,34 @@ const RITUAL = [
 ];
 
 export default function App() {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<CategoryFilter>("all");
-  const [sort, setSort] = useState<SortKey>("featured");
-  const [loading, setLoading] = useState(true);
+  const {
+    query,
+    setQuery,
+    category,
+    setCategory,
+    sort,
+    setSort,
+    loading,
+    setLoading,
+    filtered,
+    countByCategory,
+    resetFilters,
+    FILTERS,
+  } = useProductFilters();
 
-  const [cart, setCart] = useState<CartItem[]>(loadCart);
-  const [badgeBump, setBadgeBump] = useState(0);
+  const { cart, badgeBump, toasts, addToCart, updateQty, removeItem, clearCart, dismissToast } = useCart();
+  const { items, cartCount, subtotal, shipping, total, freeShipping, missing, progress } = useCartCalculations(cart);
+
   const [cartOpen, setCartOpen] = useState(false);
   const [detail, setDetail] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [toasts, setToasts] = useState<ToastMsg[]>([]);
 
   const catalogRef = useRef<HTMLDivElement>(null);
-  const toastId = useRef(0);
 
   useEffect(() => {
     const t = window.setTimeout(() => setLoading(false), 750);
     return () => window.clearTimeout(t);
   }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(CART_KEY, JSON.stringify(cart));
-    } catch {
-      /* almacenamiento no disponible */
-    }
-  }, [cart]);
 
   const overlayOpen = cartOpen || detail !== null || checkoutOpen;
   useEffect(() => {
@@ -88,107 +71,13 @@ export default function App() {
     };
   }, [overlayOpen]);
 
-  const pushToast = useCallback((text: string, kind: ToastMsg["kind"] = "success") => {
-    const id = ++toastId.current;
-    setToasts((t) => [...t.slice(-2), { id, text, kind }]);
-    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3400);
-  }, []);
-
-  const addToCart = useCallback(
-    (product: Product, weight: Weight = 250, grind: string = "En grano", qty: number = 1) => {
-      const key = `${product.id}|${weight}|${grind}`;
-      setCart((prev) => {
-        const found = prev.find((i) => i.key === key);
-        if (found) {
-          return prev.map((i) => (i.key === key ? { ...i, qty: Math.min(12, i.qty + qty) } : i));
-        }
-        return [...prev, { key, productId: product.id, weight, grind, qty }];
-      });
-      setBadgeBump((b) => b + 1);
-      pushToast(`${product.name} (${weight === 250 ? "250 g" : "1 kg"}) añadido al carrito.`);
-    },
-    [pushToast]
-  );
-
-  const updateQty = useCallback((key: string, delta: number) => {
-    setCart((prev) =>
-      prev.map((i) => (i.key === key ? { ...i, qty: Math.min(12, Math.max(1, i.qty + delta)) } : i))
-    );
-  }, []);
-
-  const removeItem = useCallback(
-    (key: string) => {
-      setCart((prev) => prev.filter((i) => i.key !== key));
-      pushToast("Producto retirado del carrito.", "info");
-    },
-    [pushToast]
-  );
-
-  const items: EnrichedItem[] = useMemo(
-    () =>
-      cart
-        .map((i) => {
-          const product = products.find((p) => p.id === i.productId)!;
-          return { ...i, product, unitPrice: priceForWeight(product.price, i.weight) };
-        })
-        .filter((i) => i.product),
-    [cart]
-  );
-
-  const cartCount = items.reduce((a, i) => a + i.qty, 0);
-  const subtotal = items.reduce((a, i) => a + i.unitPrice * i.qty, 0);
-  const shipping = items.length === 0 || subtotal >= FREE_SHIPPING_FROM ? 0 : SHIPPING_COST;
-  const total = subtotal + shipping;
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let list = products.filter((p) => {
-      const matchesCategory = category === "all" || p.category === category;
-      if (!matchesCategory) return false;
-      if (!q) return true;
-      const haystack = [p.name, p.origin, p.description, CATEGORY_LABELS[p.category], ...p.notes]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-    switch (sort) {
-      case "price-asc":
-        list = [...list].sort((a, b) => a.price - b.price);
-        break;
-      case "price-desc":
-        list = [...list].sort((a, b) => b.price - a.price);
-        break;
-      case "roast-asc":
-        list = [...list].sort((a, b) => a.roast - b.roast);
-        break;
-      default:
-        break;
-    }
-    return list;
-  }, [query, category, sort]);
-
-  const countByCategory = useMemo(() => {
-    const map: Record<string, number> = { all: products.length };
-    products.forEach((p) => {
-      map[p.category] = (map[p.category] ?? 0) + 1;
-    });
-    return map;
-  }, []);
-
-  const scrollToCatalog = () => catalogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  const resetFilters = () => {
-    setQuery("");
-    setCategory("all");
-    setSort("featured");
-  };
-
   const handleCheckoutComplete = () => {
     setCheckoutOpen(false);
     setCartOpen(false);
-    setCart([]);
-    pushToast("¡Gracias! Tu pedido quedó confirmado (simulación).", "success");
+    clearCart();
   };
+
+  const scrollToCatalog = () => catalogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div className="min-h-screen bg-espresso-900 text-crema-100">
@@ -277,7 +166,7 @@ export default function App() {
             {query.trim() && (
               <p className="mt-4 flex items-center gap-2 text-sm text-crema-400">
                 <SearchIcon className="text-caramel-500" />
-                Resultados para <span className="font-bold text-crema-100">“{query.trim()}”</span>
+                Resultados para <span className="font-bold text-crema-100">"{query.trim()}"</span>
                 <button
                   onClick={() => setQuery("")}
                   className="ml-1 flex items-center gap-1 rounded-full border border-espresso-600 px-2.5 py-0.5 text-xs font-semibold text-crema-300 transition hover:border-ember-500/60 hover:text-ember-400"
@@ -378,7 +267,7 @@ export default function App() {
         />
       )}
 
-      <Toasts toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} onOpenCart={() => setCartOpen(true)} />
+      <Toasts toasts={toasts} onDismiss={dismissToast} onOpenCart={() => setCartOpen(true)} />
     </div>
   );
 }
