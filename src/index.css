@@ -3,6 +3,7 @@
 @theme {
   --font-display: "Fraunces", "Georgia", serif;
   --font-body: "Karla", "Trebuchet MS", sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
 
   --color-espresso-950: #100a06;
   --color-espresso-900: #1a110b;
@@ -31,6 +32,7 @@
   --color-ember-500: #c96844;
 
   --animate-marquee: marquee 30s linear infinite;
+  --animate-marquee-slow: marquee 46s linear infinite;
   --animate-spin-slower: spin-slower 26s linear infinite;
   --animate-steam: steam 3.4s ease-in-out infinite;
   --animate-pop: pop 0.5s cubic-bezier(0.22, 1.6, 0.36, 1) both;
@@ -42,6 +44,8 @@
   --animate-float: float 5.5s ease-in-out infinite;
   --animate-shimmer: shimmer 1.5s linear infinite;
   --animate-draw-check: draw-check 0.6s ease-out 0.15s both;
+  --animate-kenburns: kenburns 18s ease-in-out infinite alternate;
+  --animate-blink: blink 2s ease-in-out infinite;
 }
 
 @keyframes marquee {
@@ -94,6 +98,14 @@
   from { stroke-dashoffset: 48; }
   to { stroke-dashoffset: 0; }
 }
+@keyframes kenburns {
+  from { transform: scale(1) translate(0, 0); }
+  to { transform: scale(1.12) translate(-1.5%, 1.5%); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 
 html {
   scroll-behavior: smooth;
@@ -134,6 +146,15 @@ body {
   pointer-events: none;
   opacity: 0.05;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* textura de papel para la ficha de cata */
+.paper-sheet {
+  background-color: var(--color-crema-100);
+  background-image:
+    radial-gradient(circle at 85% 12%, rgba(176, 111, 29, 0.08) 0, transparent 34%),
+    radial-gradient(circle at 8% 92%, rgba(129, 80, 40, 0.09) 0, transparent 30%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.045'/%3E%3C/svg%3E");
 }
 
 .nice-scroll::-webkit-scrollbar {
